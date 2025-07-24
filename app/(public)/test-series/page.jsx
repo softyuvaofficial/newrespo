@@ -9,7 +9,11 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import Header from '@/components/Header';
 import Footer from '@/components/Footer';
 import TestCard from '@/components/TestCard';
-import { Search, Filter, SortAsc } from 'lucide-react';
+import { Search } from 'lucide-react';
+
+// Supabase client import — apne supabaseClient ka path yahan import karein
+import supabase from '../../../lib/supabaseClient';
+  
 
 export default function TestSeries() {
   const [tests, setTests] = useState([]);
@@ -21,126 +25,46 @@ export default function TestSeries() {
   const [sortBy, setSortBy] = useState('newest');
 
   useEffect(() => {
-    // Load demo data
-    const demoTests = [
-      {
-        id: 1,
-        title: "🎯 JEE Main Complete Mock Test 2024",
-        description: "Master JEE Main with our comprehensive mock test series. Latest pattern questions with detailed solutions and performance analytics.",
-        duration: 180,
-        total_questions: 90,
-        category: { name: "Engineering" },
-        difficulty: "high",
-        price: 0,
-        is_free: true,
-        rating: 4.8,
-        participants_count: 1250,
-        test_tabs: [
-          { id: 1, name: "Mock Test" },
-          { id: 2, name: "Previous Year" }
-        ]
-      },
-      {
-        id: 2,
-        title: "🧬 NEET Biology Mastery Series",
-        description: "Ace NEET Biology with our expertly crafted practice tests. Detailed explanations and concept-wise analysis included.",
-        duration: 120,
-        total_questions: 45,
-        category: { name: "Medical" },
-        difficulty: "medium",
-        price: 299,
-        is_free: false,
-        rating: 4.6,
-        participants_count: 890,
-        test_tabs: [
-          { id: 3, name: "Practice Test" }
-        ]
-      },
-      {
-        id: 3,
-        title: "🏦 IBPS Bank PO Reasoning Pro",
-        description: "Master banking reasoning with our comprehensive practice series. Shortcuts, tricks, and time-saving techniques included.",
-        duration: 90,
-        total_questions: 50,
-        category: { name: "Banking" },
-        difficulty: "medium",
-        price: 199,
-        is_free: false,
-        rating: 4.7,
-        participants_count: 567,
-        test_tabs: [
-          { id: 4, name: "Sectional Test" }
-        ]
-      },
-      {
-        id: 4,
-        title: "🏛️ UPSC Prelims GS Paper 1 Elite",
-        description: "Crack UPSC Prelims with our elite General Studies Paper 1 series. Current affairs and comprehensive coverage.",
-        duration: 120,
-        total_questions: 100,
-        category: { name: "Civil Services" },
-        difficulty: "high",
-        price: 499,
-        is_free: false,
-        rating: 4.9,
-        participants_count: 2300,
-        test_tabs: [
-          { id: 5, name: "Mock Test" },
-          { id: 6, name: "Previous Year" }
-        ]
-      },
-      {
-        id: 5,
-        title: "📊 SSC CGL Mathematics Champion",
-        description: "Excel in SSC CGL Mathematics with our step-by-step solution approach. Perfect for government job aspirants.",
-        duration: 60,
-        total_questions: 25,
-        category: { name: "Government" },
-        difficulty: "medium",
-        price: 149,
-        is_free: false,
-        rating: 4.5,
-        participants_count: 1890,
-        test_tabs: [
-          { id: 7, name: "Sectional Test" }
-        ]
-      },
-      {
-        id: 6,
-        title: "📈 CAT Quantitative Aptitude Pro",
-        description: "Master CAT Quant with our advanced test series. Detailed analysis and shortcut techniques for MBA aspirants.",
-        duration: 40,
-        total_questions: 22,
-        category: { name: "Management" },
-        difficulty: "high",
-        price: 399,
-        is_free: false,
-        rating: 4.8,
-        participants_count: 756,
-        test_tabs: [
-          { id: 8, name: "Sectional Test" }
-        ]
+    async function fetchTests() {
+      const { data, error } = await supabase
+        .from('test_series')
+        .select(`
+          *,
+          categories (name),
+          test_tabs (*)
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) {
+        console.error('Error fetching test series:', error);
+      } else {
+        setTests(data || []);
+        setFilteredTests(data || []);
       }
-    ];
+    }
 
-    setTests(demoTests);
-    setFilteredTests(demoTests);
+    async function fetchCategories() {
+      const { data, error } = await supabase
+        .from('categories')
+        .select('*')
+        .order('name');
 
-    setCategories([
-      { name: "All", value: "all" },
-      { name: "Engineering", value: "engineering" },
-      { name: "Medical", value: "medical" },
-      { name: "Banking", value: "banking" },
-      { name: "Civil Services", value: "civil-services" },
-      { name: "Government", value: "government" },
-      { name: "Management", value: "management" }
-    ]);
+      if (error) {
+        console.error('Error fetching categories:', error);
+      } else {
+        const allOption = { name: "All", value: "all" };
+        const catOptions = data?.map(c => ({ name: c.name, value: c.name.toLowerCase() })) || [];
+        setCategories([allOption, ...catOptions]);
+      }
+    }
+
+    fetchTests();
+    fetchCategories();
   }, []);
 
   useEffect(() => {
     let filtered = tests;
 
-    // Apply search filter
     if (searchTerm) {
       filtered = filtered.filter(test =>
         test.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -148,22 +72,19 @@ export default function TestSeries() {
       );
     }
 
-    // Apply category filter
     if (selectedCategory !== 'all') {
       filtered = filtered.filter(test =>
-        test.category.name.toLowerCase() === selectedCategory.replace('-', ' ')
+        test.category?.name.toLowerCase() === selectedCategory.replace('-', ' ')
       );
     }
 
-    // Apply difficulty filter
     if (selectedDifficulty !== 'all') {
       filtered = filtered.filter(test => test.difficulty === selectedDifficulty);
     }
 
-    // Apply sorting
     switch (sortBy) {
       case 'newest':
-        filtered = filtered.sort((a, b) => b.id - a.id);
+        filtered = filtered.sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
         break;
       case 'popular':
         filtered = filtered.sort((a, b) => b.participants_count - a.participants_count);

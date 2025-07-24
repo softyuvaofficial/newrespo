@@ -8,8 +8,11 @@ import { Label } from '@/components/ui/label';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
+import { createClientComponentClient } from '@supabase/auth-helpers-nextjs';
+
 export default function AdminLoginPage() {
   const router = useRouter();
+  const supabase = createClientComponentClient();
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -22,27 +25,45 @@ export default function AdminLoginPage() {
     setLoading(true);
 
     try {
-      const res = await fetch('/api/auth', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'login', email, password })
+      // Sign in with Supabase
+      const { data, error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
       });
 
-      const result = await res.json();
-
-      if (!res.ok) {
-        setError(result.error || 'Login failed');
-      } else {
-        // backend से role confirm करें
-        if (result.role !== 'admin') {
-          setError('Unauthorized: Admin access required');
-          setLoading(false);
-          return;
-        }
-        router.push('/admin/dashboard');
+      if (signInError) {
+        setError(signInError.message);
+        setLoading(false);
+        return;
       }
-    } catch {
+
+      // User logged in successfully: data.user
+
+      // Check user role, assuming you have a "role" field in user metadata or a separate 'profiles' table
+      // Here, example: fetch role from profiles table with user id
+      const { data: profile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', data.user.id)
+        .single();
+
+      if (profileError || !profile) {
+        setError('Failed to fetch user role');
+        setLoading(false);
+        return;
+      }
+
+      if (profile.role !== 'admin') {
+        setError('Unauthorized: Admin access required');
+        setLoading(false);
+        return;
+      }
+
+      // Redirect to admin dashboard on success
+      router.push('/admin/dashboard');
+    } catch (err) {
       setError('Something went wrong!');
+      setLoading(false);
     } finally {
       setLoading(false);
     }

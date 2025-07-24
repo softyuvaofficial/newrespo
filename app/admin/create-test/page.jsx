@@ -18,6 +18,7 @@ import { Plus, Search, Filter, Eye, Trash2, Save } from 'lucide-react';
 export default function AdminCreateTest() {
   const { admin, loading, signOut } = useAdminAuth();
   const router = useRouter();
+
   const [questions, setQuestions] = useState([]);
   const [selectedQuestions, setSelectedQuestions] = useState([]);
   const [categories, setCategories] = useState([]);
@@ -26,17 +27,22 @@ export default function AdminCreateTest() {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedSubject, setSelectedSubject] = useState('all');
   const [selectedDifficulty, setSelectedDifficulty] = useState('all');
+  const [creating, setCreating] = useState(false);
+
   const [testDetails, setTestDetails] = useState({
     title: '',
     description: '',
-    categoryId: '',
+    categoryId: null,
     difficulty: 'medium',
     duration: 180,
     instructions: '',
-    tabId: ''
+    tabId: null
   });
+
+  const [formErrors, setFormErrors] = useState({});
   const [testTabs, setTestTabs] = useState([]);
 
+  // Admin authentication check aur demo data load karna
   useEffect(() => {
     if (!loading && !admin) {
       router.push('/admin-login');
@@ -44,12 +50,12 @@ export default function AdminCreateTest() {
     }
 
     if (admin) {
-      // Load demo data
+      // Demo questions generate kar rahe hain
       const demoQuestions = [];
       for (let i = 1; i <= 100; i++) {
         demoQuestions.push({
           id: i,
-          questionText: `Question ${i}: What is the correct answer for this ${i <= 30 ? 'Physics' : i <= 60 ? 'Chemistry' : 'Mathematics'} problem?`,
+          questionText: `Question ${i}: Is prashn ka sahi uttar kya hai? (${i <= 30 ? 'Physics' : i <= 60 ? 'Chemistry' : 'Mathematics'})`,
           optionA: `Option A for question ${i}`,
           optionB: `Option B for question ${i}`,
           optionC: `Option C for question ${i}`,
@@ -72,7 +78,7 @@ export default function AdminCreateTest() {
       ]);
 
       setSubjects(['Physics', 'Chemistry', 'Mathematics', 'Biology', 'English', 'Reasoning']);
-      
+
       setTestTabs([
         { id: 1, name: 'Mock Test', type: 'mock' },
         { id: 2, name: 'Previous Year', type: 'pyq' },
@@ -83,11 +89,13 @@ export default function AdminCreateTest() {
     }
   }, [admin, loading, router]);
 
+  // Logout function
   const handleSignOut = async () => {
     await signOut();
     router.push('/admin-login');
   };
 
+  // Filter questions based on user inputs
   const filteredQuestions = questions.filter(question => {
     const matchesSearch = question.questionText.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesCategory = selectedCategory === 'all' || question.category.id.toString() === selectedCategory;
@@ -96,81 +104,103 @@ export default function AdminCreateTest() {
     return matchesSearch && matchesCategory && matchesSubject && matchesDifficulty;
   });
 
+  // Ek question select ya deselect karna
   const handleQuestionSelect = (questionId) => {
-    setSelectedQuestions(prev => 
+    setSelectedQuestions(prev =>
       prev.includes(questionId)
         ? prev.filter(id => id !== questionId)
         : [...prev, questionId]
     );
   };
 
+  // Sabhi filtered questions ko select/deselect karna
   const handleSelectAll = () => {
-    if (selectedQuestions.length === filteredQuestions.length) {
+    if (selectedQuestions.length === filteredQuestions.length && filteredQuestions.length > 0) {
       setSelectedQuestions([]);
     } else {
       setSelectedQuestions(filteredQuestions.map(q => q.id));
     }
   };
 
+  // Auto select karne ka helper function
   const handleAutoSelect = (count, difficulty = null, subject = null) => {
     let availableQuestions = filteredQuestions;
-    
+
     if (difficulty) {
       availableQuestions = availableQuestions.filter(q => q.difficulty === difficulty);
     }
-    
+
     if (subject) {
       availableQuestions = availableQuestions.filter(q => q.subject === subject);
     }
-    
+
     const randomQuestions = availableQuestions
       .sort(() => 0.5 - Math.random())
       .slice(0, count)
       .map(q => q.id);
-    
+
     setSelectedQuestions(prev => [...new Set([...prev, ...randomQuestions])]);
   };
 
+  // Form validation function
+  const validateForm = () => {
+    const errors = {};
+    if (!testDetails.title.trim()) errors.title = 'Test title jaruri hai';
+    if (!testDetails.categoryId) errors.categoryId = 'Category select karna zaroori hai';
+    if (!testDetails.tabId) errors.tabId = 'Test tab select karna zaroori hai';
+    if (selectedQuestions.length === 0) errors.questions = 'Kam se kam ek question select karein';
+    if (!testDetails.duration || isNaN(testDetails.duration) || testDetails.duration <= 0) errors.duration = 'Sahi duration dalein';
+
+    setFormErrors(errors);
+    return Object.keys(errors).length === 0;
+  };
+
+  // Test create karna
   const handleCreateTest = () => {
-    if (!testDetails.title.trim() || !testDetails.categoryId || selectedQuestions.length === 0) {
-      alert('Please fill all required fields and select at least one question');
-      return;
-    }
+    if (!validateForm()) return;
+
+    if (!window.confirm('Kya aap sach mein ye test create karna chahte hain?')) return;
+
+    setCreating(true);
 
     const newTest = {
       id: Date.now(),
       title: testDetails.title,
       description: testDetails.description,
-      category: categories.find(c => c.id === parseInt(testDetails.categoryId)),
+      category: categories.find(c => c.id === testDetails.categoryId),
       difficulty: testDetails.difficulty,
-      duration: parseInt(testDetails.duration),
+      duration: testDetails.duration,
       totalQuestions: selectedQuestions.length,
       instructions: testDetails.instructions,
-      tab: testTabs.find(t => t.id === parseInt(testDetails.tabId)),
+      tab: testTabs.find(t => t.id === testDetails.tabId),
       questions: selectedQuestions.map(id => questions.find(q => q.id === id)),
       createdAt: new Date().toISOString()
     };
 
     console.log('Test created:', newTest);
-    alert('Test created successfully!');
-    
+    alert('Test successfully create ho gaya!');
+
     // Reset form
     setTestDetails({
       title: '',
       description: '',
-      categoryId: '',
+      categoryId: null,
       difficulty: 'medium',
       duration: 180,
       instructions: '',
-      tabId: ''
+      tabId: null
     });
     setSelectedQuestions([]);
+    setFormErrors({});
+    setCreating(false);
   };
 
+  // Selected question hatao
   const removeSelectedQuestion = (questionId) => {
     setSelectedQuestions(prev => prev.filter(id => id !== questionId));
   };
 
+  // Loading state
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
@@ -189,22 +219,22 @@ export default function AdminCreateTest() {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <AdminSidebar onSignOut={handleSignOut} />
-      
+
       <div className="flex-1 lg:ml-0">
         {/* Header */}
         <div className="bg-white shadow-sm border-b px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">Create Test</h1>
-              <p className="text-gray-600">Create tests by selecting questions from the question bank</p>
+              <h1 className="text-2xl font-bold text-gray-900">Test Banayein</h1>
+              <p className="text-gray-600">Question bank se questions chun kar test banayein</p>
             </div>
             <div className="flex items-center space-x-4">
               <Badge className="bg-blue-100 text-blue-800">
-                {selectedQuestions.length} questions selected
+                {selectedQuestions.length} questions select kiye gaye
               </Badge>
-              <Button onClick={handleCreateTest} disabled={selectedQuestions.length === 0}>
+              <Button onClick={handleCreateTest} disabled={creating || selectedQuestions.length === 0}>
                 <Save className="h-4 w-4 mr-2" />
-                Create Test
+                {creating ? 'Create kar rahe hain...' : 'Test Banayein'}
               </Button>
             </div>
           </div>
@@ -212,12 +242,12 @@ export default function AdminCreateTest() {
 
         <div className="p-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            {/* Test Configuration */}
+            {/* Test Configuration Form */}
             <div className="lg:col-span-1">
               <Card className="sticky top-6">
                 <CardHeader>
                   <CardTitle>Test Configuration</CardTitle>
-                  <CardDescription>Set up your test details</CardDescription>
+                  <CardDescription>Apne test ki jankari yahan bharain</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                   <div>
@@ -226,8 +256,9 @@ export default function AdminCreateTest() {
                       id="testTitle"
                       value={testDetails.title}
                       onChange={(e) => setTestDetails({ ...testDetails, title: e.target.value })}
-                      placeholder="Enter test title"
+                      placeholder="Test ka naam daalein"
                     />
+                    {formErrors.title && <p className="text-red-500 text-sm mt-1">{formErrors.title}</p>}
                   </div>
 
                   <div>
@@ -236,7 +267,7 @@ export default function AdminCreateTest() {
                       id="testDescription"
                       value={testDetails.description}
                       onChange={(e) => setTestDetails({ ...testDetails, description: e.target.value })}
-                      placeholder="Enter test description"
+                      placeholder="Test ka vivaran likhein"
                       rows={3}
                     />
                   </div>
@@ -244,11 +275,17 @@ export default function AdminCreateTest() {
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="testCategory">Category *</Label>
-                      <Select value={testDetails.categoryId} onValueChange={(value) => setTestDetails({ ...testDetails, categoryId: value })}>
+                      <Select
+                        value={testDetails.categoryId?.toString() || ''}
+                        onValueChange={(value) =>
+                          setTestDetails({ ...testDetails, categoryId: value ? Number(value) : null })
+                        }
+                      >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select category" />
+                          <SelectValue placeholder="Category chuniye" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="">Select Category</SelectItem>
                           {categories.map(category => (
                             <SelectItem key={category.id} value={category.id.toString()}>
                               {category.name}
@@ -256,15 +293,22 @@ export default function AdminCreateTest() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {formErrors.categoryId && <p className="text-red-500 text-sm mt-1">{formErrors.categoryId}</p>}
                     </div>
 
                     <div>
-                      <Label htmlFor="testTab">Test Tab</Label>
-                      <Select value={testDetails.tabId} onValueChange={(value) => setTestDetails({ ...testDetails, tabId: value })}>
+                      <Label htmlFor="testTab">Test Tab *</Label>
+                      <Select
+                        value={testDetails.tabId?.toString() || ''}
+                        onValueChange={(value) =>
+                          setTestDetails({ ...testDetails, tabId: value ? Number(value) : null })
+                        }
+                      >
                         <SelectTrigger>
-                          <SelectValue placeholder="Select tab" />
+                          <SelectValue placeholder="Tab chuniye" />
                         </SelectTrigger>
                         <SelectContent>
+                          <SelectItem value="">Select Tab</SelectItem>
                           {testTabs.map(tab => (
                             <SelectItem key={tab.id} value={tab.id.toString()}>
                               {tab.name}
@@ -272,20 +316,24 @@ export default function AdminCreateTest() {
                           ))}
                         </SelectContent>
                       </Select>
+                      {formErrors.tabId && <p className="text-red-500 text-sm mt-1">{formErrors.tabId}</p>}
                     </div>
                   </div>
 
                   <div className="grid grid-cols-2 gap-4">
                     <div>
                       <Label htmlFor="testDifficulty">Difficulty</Label>
-                      <Select value={testDetails.difficulty} onValueChange={(value) => setTestDetails({ ...testDetails, difficulty: value })}>
+                      <Select
+                        value={testDetails.difficulty}
+                        onValueChange={(value) => setTestDetails({ ...testDetails, difficulty: value })}
+                      >
                         <SelectTrigger>
                           <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="easy">Easy</SelectItem>
-                          <SelectItem value="medium">Medium</SelectItem>
-                          <SelectItem value="hard">Hard</SelectItem>
+                          <SelectItem value="easy">Aasaan</SelectItem>
+                          <SelectItem value="medium">Madhyam</SelectItem>
+                          <SelectItem value="hard">Kathin</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -295,9 +343,11 @@ export default function AdminCreateTest() {
                       <Input
                         id="testDuration"
                         type="number"
+                        min={1}
                         value={testDetails.duration}
-                        onChange={(e) => setTestDetails({ ...testDetails, duration: e.target.value })}
+                        onChange={(e) => setTestDetails({ ...testDetails, duration: Number(e.target.value) })}
                       />
+                      {formErrors.duration && <p className="text-red-500 text-sm mt-1">{formErrors.duration}</p>}
                     </div>
                   </div>
 
@@ -307,14 +357,14 @@ export default function AdminCreateTest() {
                       id="testInstructions"
                       value={testDetails.instructions}
                       onChange={(e) => setTestDetails({ ...testDetails, instructions: e.target.value })}
-                      placeholder="Enter test instructions"
+                      placeholder="Test ke niyam aur instructions"
                       rows={3}
                     />
                   </div>
 
-                  {/* Auto Selection Tools */}
+                  {/* Quick Auto Selection Buttons */}
                   <div className="border-t pt-4">
-                    <h4 className="font-semibold mb-3">Quick Selection</h4>
+                    <h4 className="font-semibold mb-3">Tezi se chunav karein</h4>
                     <div className="space-y-2">
                       <Button
                         variant="outline"
@@ -322,7 +372,7 @@ export default function AdminCreateTest() {
                         onClick={() => handleAutoSelect(30, null, 'Physics')}
                         className="w-full"
                       >
-                        Add 30 Physics Questions
+                        30 Physics ke prashn jodein
                       </Button>
                       <Button
                         variant="outline"
@@ -330,7 +380,7 @@ export default function AdminCreateTest() {
                         onClick={() => handleAutoSelect(30, null, 'Chemistry')}
                         className="w-full"
                       >
-                        Add 30 Chemistry Questions
+                        30 Chemistry ke prashn jodein
                       </Button>
                       <Button
                         variant="outline"
@@ -338,7 +388,7 @@ export default function AdminCreateTest() {
                         onClick={() => handleAutoSelect(30, null, 'Mathematics')}
                         className="w-full"
                       >
-                        Add 30 Math Questions
+                        30 Maths ke prashn jodein
                       </Button>
                       <Button
                         variant="outline"
@@ -346,7 +396,7 @@ export default function AdminCreateTest() {
                         onClick={() => handleAutoSelect(20, 'easy')}
                         className="w-full"
                       >
-                        Add 20 Easy Questions
+                        20 Aasaan prashn jodein
                       </Button>
                     </div>
                   </div>
@@ -354,19 +404,20 @@ export default function AdminCreateTest() {
               </Card>
             </div>
 
-            {/* Question Selection */}
+            {/* Question Selection Tabs */}
             <div className="lg:col-span-2">
               <Tabs defaultValue="select" className="space-y-6">
                 <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="select">Select Questions</TabsTrigger>
-                  <TabsTrigger value="selected">Selected Questions ({selectedQuestions.length})</TabsTrigger>
+                  <TabsTrigger value="select">Questions Chunav</TabsTrigger>
+                  <TabsTrigger value="selected">Chune gaye Prashn ({selectedQuestions.length})</TabsTrigger>
                 </TabsList>
 
+                {/* All Questions */}
                 <TabsContent value="select">
                   <Card>
                     <CardHeader>
                       <CardTitle>Question Bank</CardTitle>
-                      <CardDescription>Select questions from the question bank</CardDescription>
+                      <CardDescription>Question bank me se chunav karein</CardDescription>
                     </CardHeader>
                     <CardContent>
                       {/* Filters */}
@@ -374,19 +425,19 @@ export default function AdminCreateTest() {
                         <div className="relative">
                           <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 text-gray-400" />
                           <Input
-                            placeholder="Search questions..."
+                            placeholder="Prashn khojein..."
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                             className="pl-10"
                           />
                         </div>
-                        
+
                         <Select value={selectedCategory} onValueChange={setSelectedCategory}>
                           <SelectTrigger>
-                            <SelectValue placeholder="All Categories" />
+                            <SelectValue placeholder="Sabhi Categories" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">All Categories</SelectItem>
+                            <SelectItem value="all">Sabhi Categories</SelectItem>
                             {categories.map(category => (
                               <SelectItem key={category.id} value={category.id.toString()}>
                                 {category.name}
@@ -397,10 +448,10 @@ export default function AdminCreateTest() {
 
                         <Select value={selectedSubject} onValueChange={setSelectedSubject}>
                           <SelectTrigger>
-                            <SelectValue placeholder="All Subjects" />
+                            <SelectValue placeholder="Sabhi Subjects" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">All Subjects</SelectItem>
+                            <SelectItem value="all">Sabhi Subjects</SelectItem>
                             {subjects.map(subject => (
                               <SelectItem key={subject} value={subject}>
                                 {subject}
@@ -411,123 +462,93 @@ export default function AdminCreateTest() {
 
                         <Select value={selectedDifficulty} onValueChange={setSelectedDifficulty}>
                           <SelectTrigger>
-                            <SelectValue placeholder="All Difficulties" />
+                            <SelectValue placeholder="Sabhi Difficulties" />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="all">All Difficulties</SelectItem>
-                            <SelectItem value="easy">Easy</SelectItem>
-                            <SelectItem value="medium">Medium</SelectItem>
-                            <SelectItem value="hard">Hard</SelectItem>
+                            <SelectItem value="all">Sabhi Difficulty Levels</SelectItem>
+                            <SelectItem value="easy">Aasaan</SelectItem>
+                            <SelectItem value="medium">Madhyam</SelectItem>
+                            <SelectItem value="hard">Kathin</SelectItem>
                           </SelectContent>
                         </Select>
                       </div>
 
-                      {/* Select All */}
-                      <div className="flex items-center justify-between mb-4">
-                        <div className="flex items-center space-x-2">
-                          <Checkbox
-                            id="selectAll"
-                            checked={selectedQuestions.length === filteredQuestions.length && filteredQuestions.length > 0}
-                            onCheckedChange={handleSelectAll}
-                          />
-                          <Label htmlFor="selectAll">
-                            Select All ({filteredQuestions.length} questions)
-                          </Label>
-                        </div>
-                        <Badge variant="outline">
-                          {selectedQuestions.length} selected
-                        </Badge>
+                      {/* Select All Checkbox */}
+                      <div className="mb-4 flex items-center space-x-2">
+                        <Checkbox
+                          id="selectAll"
+                          checked={
+                            selectedQuestions.length === filteredQuestions.length && filteredQuestions.length > 0
+                          }
+                          onCheckedChange={handleSelectAll}
+                          disabled={filteredQuestions.length === 0}
+                        />
+                        <Label htmlFor="selectAll" className="select-none">
+                          Sabhi dikhaye gaye questions select karein
+                        </Label>
                       </div>
 
-                      {/* Questions List */}
-                      <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {filteredQuestions.slice(0, 20).map((question) => (
-                          <div key={question.id} className="border rounded-lg p-4 hover:bg-gray-50">
-                            <div className="flex items-start space-x-3">
-                              <Checkbox
-                                checked={selectedQuestions.includes(question.id)}
-                                onCheckedChange={() => handleQuestionSelect(question.id)}
-                              />
-                              <div className="flex-1">
-                                <p className="font-medium text-gray-900 mb-2">{question.questionText}</p>
-                                <div className="flex items-center space-x-4 text-sm">
-                                  <Badge variant="outline">{question.subject}</Badge>
-                                  <Badge className={
-                                    question.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
-                                    question.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                    'bg-red-100 text-red-800'
-                                  }>
-                                    {question.difficulty}
-                                  </Badge>
-                                  <span className="text-gray-500">Used {question.usageCount} times</span>
-                                </div>
-                              </div>
+                      {/* Question List */}
+                      <div className="max-h-[50vh] overflow-y-auto border rounded-md p-2">
+                        {filteredQuestions.length === 0 && <p className="text-gray-600">Koi prashn nahi mila</p>}
+                        {filteredQuestions.map(question => (
+                          <div
+                            key={question.id}
+                            className="border-b py-2 flex items-center space-x-3 hover:bg-gray-100 rounded cursor-pointer"
+                            onClick={() => handleQuestionSelect(question.id)}
+                          >
+                            <Checkbox
+                              checked={selectedQuestions.includes(question.id)}
+                              onCheckedChange={() => handleQuestionSelect(question.id)}
+                              onClick={e => e.stopPropagation()}
+                            />
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold">{question.questionText}</p>
+                              <p className="text-xs text-gray-500">
+                                Subject: {question.subject} | Difficulty: {question.difficulty} | Use Count:{' '}
+                                {question.usageCount}
+                              </p>
                             </div>
                           </div>
                         ))}
                       </div>
-
-                      {filteredQuestions.length > 20 && (
-                        <div className="text-center mt-4">
-                          <p className="text-sm text-gray-500">
-                            Showing 20 of {filteredQuestions.length} questions. Use filters to narrow down.
-                          </p>
-                        </div>
-                      )}
                     </CardContent>
                   </Card>
                 </TabsContent>
 
+                {/* Selected Questions */}
                 <TabsContent value="selected">
                   <Card>
                     <CardHeader>
-                      <CardTitle>Selected Questions</CardTitle>
-                      <CardDescription>Review and manage selected questions</CardDescription>
+                      <CardTitle>Chune Gaye Prashn</CardTitle>
+                      <CardDescription>
+                        Aapne {selectedQuestions.length} prashn select kiye hain
+                      </CardDescription>
                     </CardHeader>
                     <CardContent>
-                      {selectedQuestions.length === 0 ? (
-                        <div className="text-center py-8">
-                          <p className="text-gray-500">No questions selected yet</p>
-                          <p>Go to &quot;Select Questions&quot; tab to add questions</p>
-
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {selectedQuestions.map((questionId, index) => {
-                            const question = questions.find(q => q.id === questionId);
-                            if (!question) return null;
-                            
-                            return (
-                              <div key={questionId} className="border rounded-lg p-4 hover:bg-gray-50">
-                                <div className="flex items-start justify-between">
-                                  <div className="flex-1">
-                                    <div className="flex items-center space-x-2 mb-2">
-                                      <Badge variant="outline">Q{index + 1}</Badge>
-                                      <Badge variant="outline">{question.subject}</Badge>
-                                      <Badge className={
-                                        question.difficulty === 'easy' ? 'bg-green-100 text-green-800' :
-                                        question.difficulty === 'medium' ? 'bg-yellow-100 text-yellow-800' :
-                                        'bg-red-100 text-red-800'
-                                      }>
-                                        {question.difficulty}
-                                      </Badge>
-                                    </div>
-                                    <p className="font-medium text-gray-900">{question.questionText}</p>
-                                  </div>
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    onClick={() => removeSelectedQuestion(questionId)}
-                                    className="text-red-600 hover:text-red-700"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                            );
-                          })}
-                        </div>
+                      {selectedQuestions.length === 0 && (
+                        <p className="text-gray-600">Abhi tak koi prashn select nahi kiya gaya hai.</p>
                       )}
+                      {selectedQuestions.map(id => {
+                        const question = questions.find(q => q.id === id);
+                        if (!question) return null;
+                        return (
+                          <div
+                            key={id}
+                            className="border-b py-2 flex justify-between items-center space-x-3 hover:bg-gray-100 rounded"
+                          >
+                            <div className="flex-1">
+                              <p className="text-sm font-semibold">{question.questionText}</p>
+                              <p className="text-xs text-gray-500">
+                                Subject: {question.subject} | Difficulty: {question.difficulty}
+                              </p>
+                            </div>
+                            <Button variant="ghost" size="sm" onClick={() => removeSelectedQuestion(id)}>
+                              <Trash2 className="w-4 h-4 text-red-600" />
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </CardContent>
                   </Card>
                 </TabsContent>
