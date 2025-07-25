@@ -1,34 +1,57 @@
+// app/api/categories/[id]/route.js
+import { NextResponse } from 'next/server';
 import { supabase } from '@/utils/supabaseClient';
 
 export async function PUT(request, { params }) {
-  const { id } = params;
-  const body = await request.json();
+  try {
+    const { id } = params;
+    const body = await request.json();
+    
+    const { data: category, error } = await supabase
+      .from('categories')
+      .update(body)
+      .eq('id', id)
+      .select()
+      .single();
 
-  const { name, icon, status } = body;
+    if (error) {
+      throw error;
+    }
 
-  const { data, error } = await supabase
-    .from('categories')
-    .update({ name, icon, status })
-    .eq('id', id)
-    .select();
-
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    return NextResponse.json(category);
+  } catch (error) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
-
-  return new Response(JSON.stringify(data[0]), { status: 200 });
 }
 
 export async function DELETE(request, { params }) {
-  const { id } = params;
+  try {
+    const { id } = params;
+    
+    // First delete all subcategories under this category
+    await supabase
+      .from('subcategories')
+      .delete()
+      .eq('category_id', id);
 
-  const { error } = await supabase.from('categories').delete().eq('id', id);
+    // Then delete the category
+    const { error } = await supabase
+      .from('categories')
+      .delete()
+      .eq('id', id);
 
-  if (error) {
-    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+    if (error) {
+      throw error;
+    }
+
+    return NextResponse.json({ success: true });
+  } catch (error) {
+    return NextResponse.json(
+      { error: error.message },
+      { status: 500 }
+    );
   }
-
-  return new Response(JSON.stringify({ message: 'Deleted successfully' }), {
-    status: 200,
-  });
 }
