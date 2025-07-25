@@ -104,6 +104,9 @@ export default function AdminCreateTest() {
     return matchesSearch && matchesCategory && matchesSubject && matchesDifficulty;
   });
 
+  const filteredQuestionIds = filteredQuestions.map(q => q.id);
+  const areAllFilteredSelected = filteredQuestionIds.length > 0 && filteredQuestionIds.every(id => selectedQuestions.includes(id));
+
   // Ek question select ya deselect karna
   const handleQuestionSelect = (questionId) => {
     setSelectedQuestions(prev =>
@@ -115,10 +118,12 @@ export default function AdminCreateTest() {
 
   // Sabhi filtered questions ko select/deselect karna
   const handleSelectAll = () => {
-    if (selectedQuestions.length === filteredQuestions.length && filteredQuestions.length > 0) {
-      setSelectedQuestions([]);
+    if (areAllFilteredSelected) {
+      // Agar sabhi filtered questions pehle se selected hain, to unhe deselect karo
+      setSelectedQuestions(prev => prev.filter(id => !filteredQuestionIds.includes(id)));
     } else {
-      setSelectedQuestions(filteredQuestions.map(q => q.id));
+      // Varna, sabhi filtered questions ko select karo (purane selection ko rakhte hue)
+      setSelectedQuestions(prev => [...new Set([...prev, ...filteredQuestionIds])]);
     }
   };
 
@@ -477,9 +482,7 @@ export default function AdminCreateTest() {
                       <div className="mb-4 flex items-center space-x-2">
                         <Checkbox
                           id="selectAll"
-                          checked={
-                            selectedQuestions.length === filteredQuestions.length && filteredQuestions.length > 0
-                          }
+                          checked={areAllFilteredSelected}
                           onCheckedChange={handleSelectAll}
                           disabled={filteredQuestions.length === 0}
                         />
