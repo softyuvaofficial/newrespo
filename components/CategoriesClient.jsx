@@ -1,194 +1,108 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
+import { supabase } from '@/utils/supabaseClient';
+import { Pencil, Trash2 } from 'lucide-react';
 
 export default function CategoriesClient() {
   const [categories, setCategories] = useState([]);
-  const [loading, setLoading] = useState(false);
-  const [newCategory, setNewCategory] = useState({ name: '', description: '' });
-  const [editingCategory, setEditingCategory] = useState(null);
-  const [message, setMessage] = useState('');
+  const [formData, setFormData] = useState({ name: '', icon: '', status: true });
+  const [editingId, setEditingId] = useState(null);
 
-  // Fetch categories from API
   const fetchCategories = async () => {
-    setLoading(true);
-    const res = await fetch('/api/categories');
-    const data = await res.json();
-    if (res.ok) setCategories(data);
-    else setMessage(data.error || 'Failed to load categories');
-    setLoading(false);
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*, subcategories(*)')
+      .order('created_at', { ascending: false });
+
+    if (error) console.error(error);
+    else setCategories(data);
   };
 
   useEffect(() => {
     fetchCategories();
   }, []);
 
-  // Add new category
-  const handleAdd = async () => {
-    if (!newCategory.name.trim()) {
-      setMessage('Category name is required');
-      return;
-    }
-    setLoading(true);
-    const res = await fetch('/api/categories', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(newCategory),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setMessage('Category added successfully');
-      setNewCategory({ name: '', description: '' });
-      fetchCategories();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!formData.name) return;
+
+    if (editingId) {
+      await supabase.from('categories').update(formData).eq('id', editingId);
+      setEditingId(null);
     } else {
-      setMessage(data.error || 'Failed to add category');
+      await supabase.from('categories').insert([{ ...formData }]);
     }
-    setLoading(false);
+
+    setFormData({ name: '', icon: '', status: true });
+    fetchCategories();
   };
 
-  // Update category
-  const handleUpdate = async () => {
-    if (!editingCategory.name.trim()) {
-      setMessage('Category name is required');
-      return;
-    }
-    setLoading(true);
-    const res = await fetch('/api/categories', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(editingCategory),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setMessage('Category updated successfully');
-      setEditingCategory(null);
-      fetchCategories();
-    } else {
-      setMessage(data.error || 'Failed to update category');
-    }
-    setLoading(false);
+  const handleEdit = (category) => {
+    setEditingId(category.id);
+    setFormData({ name: category.name, icon: category.icon, status: category.status });
   };
 
-  // Delete category
   const handleDelete = async (id) => {
-    if (!confirm('Are you sure you want to delete this category?')) return;
-    setLoading(true);
-    const res = await fetch('/api/categories', {
-      method: 'DELETE',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id }),
-    });
-    const data = await res.json();
-    if (res.ok) {
-      setMessage('Category deleted');
-      fetchCategories();
-    } else {
-      setMessage(data.error || 'Failed to delete category');
-    }
-    setLoading(false);
+    await supabase.from('categories').delete().eq('id', id);
+    fetchCategories();
   };
 
   return (
-    <div className="max-w-3xl mx-auto p-4 bg-white rounded shadow">
-      <h2 className="text-2xl font-semibold mb-4">Manage Categories</h2>
-
-      {message && <p className="mb-4 text-red-600">{message}</p>}
-
-      {/* Add New Category */}
-      <div className="mb-6">
-        <h3 className="font-semibold mb-2">Add New Category</h3>
-        <input
-          type="text"
-          placeholder="Name"
-          value={newCategory.name}
-          onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
-          className="border p-2 mr-2 rounded"
+    <div>
+      <form onSubmit={handleSubmit} className="flex gap-4 mb-6">
+        <Input
+          placeholder="Category name"
+          value={formData.name}
+          onChange={(e) => setFormData({ ...formData, name: e.target.value })}
         />
-        <input
-          type="text"
-          placeholder="Description (optional)"
-          value={newCategory.description}
-          onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
-          className="border p-2 mr-2 rounded"
+        <Input
+          placeholder="Icon (e.g. 📚)"
+          value={formData.icon}
+          onChange={(e) => setFormData({ ...formData, icon: e.target.value })}
         />
-        <button
-          onClick={handleAdd}
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-        >
-          {loading ? 'Adding...' : 'Add'}
-        </button>
+        <Button type="submit">{editingId ? 'Update' : 'Add'}</Button>
+      </form>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {categories.map((cat) => (
+          <div
+            key={cat.id}
+            className="border rounded-lg p-4 shadow-sm bg-white flex flex-col gap-2"
+          >
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{cat.icon}</span>
+                <h2 className="font-semibold">{cat.name}</h2>
+              </div>
+              <div className="flex gap-2">
+                <Pencil
+                  className="cursor-pointer text-blue-600"
+                  size={18}
+                  onClick={() => handleEdit(cat)}
+                />
+                <Trash2
+                  className="cursor-pointer text-red-500"
+                  size={18}
+                  onClick={() => handleDelete(cat.id)}
+                />
+              </div>
+            </div>
+            <p className="text-xs text-gray-600">
+              Status: {cat.status ? 'Active' : 'Inactive'}
+            </p>
+            {cat.subcategories?.length > 0 && (
+              <ul className="text-sm text-gray-700 pl-4 list-disc">
+                {cat.subcategories.map((sub) => (
+                  <li key={sub.id}>{sub.name}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        ))}
       </div>
-
-      {/* Categories List */}
-      {loading ? (
-        <p>Loading categories...</p>
-      ) : (
-        <ul>
-          {categories.length === 0 && <li>No categories found.</li>}
-          {categories.map((cat) => (
-            <li
-              key={cat.id}
-              className="mb-3 p-3 border rounded flex justify-between items-center"
-            >
-              {editingCategory?.id === cat.id ? (
-                <>
-                  <input
-                    type="text"
-                    value={editingCategory.name}
-                    onChange={(e) =>
-                      setEditingCategory({ ...editingCategory, name: e.target.value })
-                    }
-                    className="border p-1 rounded mr-2"
-                  />
-                  <input
-                    type="text"
-                    value={editingCategory.description || ''}
-                    onChange={(e) =>
-                      setEditingCategory({ ...editingCategory, description: e.target.value })
-                    }
-                    className="border p-1 rounded mr-2"
-                  />
-                  <button
-                    onClick={handleUpdate}
-                    disabled={loading}
-                    className="bg-green-600 text-white px-3 py-1 rounded mr-2 hover:bg-green-700 disabled:opacity-50"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => setEditingCategory(null)}
-                    className="bg-gray-400 text-white px-3 py-1 rounded hover:bg-gray-500"
-                  >
-                    Cancel
-                  </button>
-                </>
-              ) : (
-                <>
-                  <div>
-                    <strong>{cat.name}</strong> <br />
-                    <small className="text-gray-600">{cat.description}</small>
-                  </div>
-                  <div>
-                    <button
-                      onClick={() => setEditingCategory(cat)}
-                      className="bg-yellow-500 text-white px-3 py-1 rounded mr-2 hover:bg-yellow-600"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => handleDelete(cat.id)}
-                      className="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                </>
-              )}
-            </li>
-          ))}
-        </ul>
-      )}
     </div>
   );
 }
