@@ -1,106 +1,45 @@
-import { NextResponse } from 'next/server';
-import { createClient } from '@supabase/supabase-js';
+import { supabase } from '@/utils/supabaseClient';
 
-// Supabase Client with Service Role Key for server-side actions
-const supabase = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL,
-  process.env.SUPABASE_SERVICE_ROLE_KEY
-);
+export async function GET() {
+  const { data, error } = await supabase.from('categories').select('*').order('created_at', { ascending: true });
+  if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  return new Response(JSON.stringify(data), { status: 200 });
+}
 
 export async function POST(request) {
-  try {
-    const { action, ...data } = await request.json();
+  const body = await request.json();
+  const { name, description } = body;
 
-    switch (action) {
-      case 'login':
-        return await handleLogin(data);
-      case 'signup':
-        return await handleSignup(data);
-      case 'logout':
-        return await handleLogout();
-      case 'refresh':
-        return await handleRefreshToken(data);
-      default:
-        return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
-    }
-  } catch (error) {
-    console.error('API Error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  if (!name || typeof name !== 'string') {
+    return new Response(JSON.stringify({ error: 'Invalid name' }), { status: 400 });
   }
+
+  const { error } = await supabase.from('categories').insert([{ name, description }]);
+  if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+
+  return new Response(JSON.stringify({ message: 'Category added' }), { status: 200 });
 }
 
-async function handleLogin({ email, password }) {
-  const { data, error } = await supabase.auth.signInWithPassword({ email, password });
+export async function PUT(request) {
+  const body = await request.json();
+  const { id, name, description } = body;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 401 });
-  }
+  if (!id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400 });
 
-  const user = data.user;
+  const { error } = await supabase.from('categories').update({ name, description }).eq('id', id);
+  if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 
-  // profiles टेबल से role चेक करें
-  const { data: profile, error: profileError } = await supabase
-    .from('profiles')
-    .select('role')
-    .eq('id', user.id)
-    .single();
-
-  if (profileError || !profile) {
-    return NextResponse.json({ error: 'Profile not found' }, { status: 403 });
-  }
-
-  if (profile.role !== 'admin') {
-    return NextResponse.json({ error: 'Unauthorized: Admin access required' }, { status: 403 });
-  }
-
-  return NextResponse.json({
-    success: true,
-    user,
-    role: profile.role,
-    token: data.session.access_token
-  });
+  return new Response(JSON.stringify({ message: 'Category updated' }), { status: 200 });
 }
 
-async function handleSignup({ email, password, fullName }) {
-  const { data, error } = await supabase.auth.signUp({ email, password });
+export async function DELETE(request) {
+  const body = await request.json();
+  const { id } = body;
 
-  if (error) {
-    return NextResponse.json({ error: error.message }, { status: 400 });
-  }
+  if (!id) return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400 });
 
-  const user = data.user;
+  const { error } = await supabase.from('categories').delete().eq('id', id);
+  if (error) return new Response(JSON.stringify({ error: error.message }), { status: 500 });
 
-  // profiles टेबल में डिफ़ॉल्ट role 'user' के साथ profile बनाएँ
-  const { error: profileError } = await supabase.from('profiles').insert({
-    id: user.id,
-    full_name: fullName,
-    role: 'user',
-    created_at: new Date().toISOString()
-  });
-
-  if (profileError) {
-    return NextResponse.json({ error: 'Profile creation failed' }, { status: 500 });
-  }
-
-  return NextResponse.json({
-    success: true,
-    user,
-    message: 'Signup successful'
-  });
-}
-
-async function handleLogout() {
-  // Supabase में logout client side होता है, इसलिए server से बस success message भेजें
-  return NextResponse.json({
-    success: true,
-    message: 'Logged out successfully'
-  });
-}
-
-async function handleRefreshToken({ refreshToken }) {
-  // Token refresh logic अगर implement हो तो यहाँ लिखें
-  return NextResponse.json({
-    success: true,
-    token: 'new-mock-jwt-token'
-  });
+  return new Response(JSON.stringify({ message: 'Category deleted' }), { status: 200 });
 }

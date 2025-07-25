@@ -1,21 +1,49 @@
 import { supabase } from '@/utils/supabaseClient';
 
-// POST: add new subcategory
+export async function GET() {
+  const { data, error } = await supabase
+    .from('subcategories')
+    .select('*')
+    .order('created_at', { ascending: true });
+
+  if (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  }
+  return new Response(JSON.stringify(data), { status: 200 });
+}
+
 export async function POST(request) {
   const body = await request.json();
-  const { categoryId, name } = body;
+  const { name, description, category_id } = body;
 
-  if (!categoryId || !name) {
-    return new Response(JSON.stringify({ error: 'categoryId and name are required' }), { status: 400 });
+  if (!name || !category_id) {
+    return new Response(JSON.stringify({ error: 'Missing fields' }), { status: 400 });
   }
 
-  const { error } = await supabase
+  const { data, error } = await supabase
     .from('subcategories')
-    .insert([{ category_id: categoryId, name }]);
+    .insert([{ name, description, category_id }]);
 
   if (error) {
     return new Response(JSON.stringify({ error: error.message }), { status: 500 });
   }
 
-  return new Response(JSON.stringify({ message: 'Subcategory added' }), { status: 200 });
+  return new Response(JSON.stringify(data[0]), { status: 201 });
+}
+
+export async function DELETE(request) {
+  const body = await request.json();
+  const { id } = body;
+
+  if (!id) {
+    return new Response(JSON.stringify({ error: 'Missing id' }), { status: 400 });
+  }
+
+  const { error } = await supabase.from('subcategories').delete().eq('id', id);
+
+  if (error) {
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  }
+
+  return new Response(JSON.stringify({ message: 'Subcategory deleted' }), { status: 200 });
 }
