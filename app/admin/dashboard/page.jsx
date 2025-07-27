@@ -2,26 +2,33 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Progress } from '@/components/ui/progress';
 import AdminSidebar from '@/components/AdminSidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
-import { 
-  Users, 
-  BookOpen, 
-  TrendingUp, 
-  DollarSign, 
-  Calendar,
-  Eye,
-  Download,
-  AlertCircle
+import {
+  Users,
+  BookOpen,
+  TrendingUp,
+  DollarSign,
+  AlertCircle,
 } from 'lucide-react';
+import { supabase } from '@/utils/supabaseClient';
 
 export default function AdminDashboard() {
   const { admin, loading, signOut } = useAdminAuth();
   const router = useRouter();
+
   const [dashboardData, setDashboardData] = useState(null);
+  const [categories, setCategories] = useState([]);
+  const [error, setError] = useState(null);
+  const [categoriesError, setCategoriesError] = useState(null);
 
   useEffect(() => {
     if (!loading && !admin) {
@@ -30,34 +37,99 @@ export default function AdminDashboard() {
     }
 
     if (admin) {
-      // Load dashboard data
-      setTimeout(() => {
-        setDashboardData({
-          stats: {
-            totalUsers: 12450,
-            activeTests: 156,
-            totalRevenue: 245000,
-            testsCompleted: 8920
-          },
-          recentActivity: [
-            { id: 1, type: 'user_signup', message: 'New user registered: john@example.com', time: '2 minutes ago' },
-            { id: 2, type: 'test_completed', message: 'Test completed: JEE Main Mock Test 1', time: '5 minutes ago' },
-            { id: 3, type: 'payment', message: 'Payment received: ₹199 for Engineering Series', time: '10 minutes ago' },
-            { id: 4, type: 'question_added', message: 'New question added to Physics category', time: '15 minutes ago' }
-          ],
-          popularTests: [
-            { id: 1, name: 'JEE Main Mock Test Series', attempts: 2340, revenue: 45000 },
-            { id: 2, name: 'NEET Biology Practice', attempts: 1890, revenue: 0 },
-            { id: 3, name: 'Bank PO Complete Series', attempts: 1560, revenue: 32000 }
-          ],
-          monthlyStats: {
-            users: [120, 150, 180, 220, 280, 320, 380, 420, 480, 520, 580, 650],
-            revenue: [15000, 18000, 22000, 25000, 28000, 32000, 35000, 38000, 42000, 45000, 48000, 52000]
-          }
-        });
-      }, 1000);
+      fetchDashboardData();
+      fetchCategories();
     }
   }, [admin, loading, router]);
+
+  async function fetchDashboardData() {
+    try {
+      setError(null);
+
+      // 1. Total Users Count
+      const { count: totalUsersCount, error: usersError } = await supabase
+        .from('users')
+        .select('id', { count: 'exact', head: true });
+      if (usersError) throw usersError;
+
+      // 2. Active Tests Count (Assuming 'tests' table has a status column)
+      const { data: activeTestsData, error: activeTestsError } = await supabase
+        .from('tests')
+        .select('id')
+        .eq('status', 'active');
+      if (activeTestsError) throw activeTestsError;
+      const activeTestsCount = activeTestsData.length;
+
+      // 3. Total Revenue (Assuming 'payments' table has 'amount' column)
+      const { data: paymentsData, error: paymentsError } = await supabase
+        .from('payments')
+        .select('amount');
+      if (paymentsError) throw paymentsError;
+      const totalRevenue = paymentsData.reduce((sum, p) => sum + (p.amount || 0), 0);
+
+      // 4. Tests Completed Count (Assuming 'test_attempts' table has 'completed' boolean)
+      const { count: testsCompletedCount, error: attemptsError } = await supabase
+        .from('test_attempts')
+        .select('id', { count: 'exact', head: true })
+        .eq('completed', true);
+      if (attemptsError) throw attemptsError;
+
+      // 5. Recent Activity
+      const { data: recentActivityData, error: activityError } = await supabase
+        .from('activity_log')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(5);
+      if (activityError) throw activityError;
+
+      // 6. Popular Tests
+      // For simplicity, you can customize this logic based on your DB schema
+      const { data: popularTestsData, error: popularTestsError } = await supabase
+        .from('tests')
+        .select('id, name, attempts, revenue')
+        .order('attempts', { ascending: false })
+        .limit(5);
+      if (popularTestsError) throw popularTestsError;
+
+      // 7. Monthly Stats (Dummy here, customize as per your DB)
+      const monthlyUsers = new Array(12).fill(0).map((_, i) => 100 + i * 20);
+      const monthlyRevenue = new Array(12).fill(0).map((_, i) => 15000 + i * 3000);
+
+      setDashboardData({
+        stats: {
+          totalUsers: totalUsersCount || 0,
+          activeTests: activeTestsCount || 0,
+          totalRevenue: totalRevenue || 0,
+          testsCompleted: testsCompletedCount || 0,
+        },
+        recentActivity: recentActivityData || [],
+        popularTests: popularTestsData || [],
+        monthlyStats: {
+          users: monthlyUsers,
+          revenue: monthlyRevenue,
+        },
+      });
+    } catch (error) {
+      console.error('Dashboard fetch error:', error);
+      setError(error.message || 'Failed to load dashboard data');
+    }
+  }
+
+  async function fetchCategories() {
+    try {
+      setCategoriesError(null);
+      const { data, error } = await supabase
+        .from('categories')
+        .select('id, name, icon, status')
+        .order('created_at', { ascending: true });
+
+      if (error) throw error;
+      setCategories(data || []);
+    } catch (error) {
+      console.error('Error fetching categories:', error);
+      setCategoriesError(error.message || 'Failed to load categories');
+    }
+  }
 
   const handleSignOut = async () => {
     await signOut();
@@ -82,10 +154,10 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <AdminSidebar onSignOut={handleSignOut} />
-      
-      <div className="flex-1 lg:ml-0">
+
+      <div className="flex-1 lg:ml-0 p-6">
         {/* Header */}
-        <div className="bg-white shadow-sm border-b px-6 py-4">
+        <div className="bg-white shadow-sm border-b px-6 py-4 mb-6">
           <div className="flex items-center justify-between">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">Dashboard</h1>
@@ -97,87 +169,136 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        <div className="p-6">
-          {/* Stats Cards */}
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Total Users</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {dashboardData?.stats.totalUsers.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-green-600 mt-1">+12% from last month</p>
-                  </div>
-                  <Users className="h-8 w-8 text-blue-500" />
-                </div>
-              </CardContent>
-            </Card>
+        {/* Show any general dashboard errors */}
+        {error && (
+          <div className="mb-6 p-4 bg-red-100 text-red-700 rounded">{error}</div>
+        )}
 
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Active Tests</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {dashboardData?.stats.activeTests}
-                    </p>
-                    <p className="text-xs text-blue-600 mt-1">+5 new this week</p>
+        {!dashboardData ? (
+          <div className="p-6 text-center text-gray-600">Loading data...</div>
+        ) : (
+          <>
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Users</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {dashboardData.stats.totalUsers.toLocaleString()}
+                      </p>
+                    </div>
+                    <Users className="h-8 w-8 text-blue-500" />
                   </div>
-                  <BookOpen className="h-8 w-8 text-green-500" />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Total Revenue</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      ₹{dashboardData?.stats.totalRevenue.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-green-600 mt-1">+18% from last month</p>
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Active Tests</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {dashboardData.stats.activeTests}
+                      </p>
+                    </div>
+                    <BookOpen className="h-8 w-8 text-green-500" />
                   </div>
-                  <DollarSign className="h-8 w-8 text-purple-500" />
-                </div>
-              </CardContent>
-            </Card>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-gray-600">Tests Completed</p>
-                    <p className="text-2xl font-bold text-gray-900">
-                      {dashboardData?.stats.testsCompleted.toLocaleString()}
-                    </p>
-                    <p className="text-xs text-green-600 mt-1">+25% from last month</p>
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Total Revenue</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        ₹{dashboardData.stats.totalRevenue.toLocaleString()}
+                      </p>
+                    </div>
+                    <DollarSign className="h-8 w-8 text-purple-500" />
                   </div>
-                  <TrendingUp className="h-8 w-8 text-orange-500" />
-                </div>
-              </CardContent>
-            </Card>
-          </div>
+                </CardContent>
+              </Card>
 
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              <Card>
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm text-gray-600">Tests Completed</p>
+                      <p className="text-2xl font-bold text-gray-900">
+                        {dashboardData.stats.testsCompleted.toLocaleString()}
+                      </p>
+                    </div>
+                    <TrendingUp className="h-8 w-8 text-orange-500" />
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+
+            {/* Categories Section */}
+            <section className="mb-12">
+              <h2 className="text-xl font-semibold mb-4">Categories</h2>
+
+              {categoriesError && (
+                <div className="mb-4 p-2 bg-red-100 text-red-700 rounded">
+                  Error loading categories: {categoriesError}
+                </div>
+              )}
+
+              {!categories.length ? (
+                <p>No categories found.</p>
+              ) : (
+                <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
+                  {categories.map((cat) => (
+                    <Card key={cat.id}>
+                      <CardHeader>
+                        <CardTitle>{cat.name}</CardTitle>
+                        <CardDescription>
+                          Status: {cat.status ? 'Active' : 'Inactive'}
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        {cat.icon ? (
+                          <img
+                            src={cat.icon}
+                            alt={`${cat.name} icon`}
+                            className="w-12 h-12 object-contain"
+                          />
+                        ) : (
+                          <Badge variant="outline">No Icon</Badge>
+                        )}
+                      </CardContent>
+                    </Card>
+                  ))}
+                </div>
+              )}
+            </section>
+
             {/* Recent Activity */}
-            <Card>
+            <Card className="mb-8">
               <CardHeader>
                 <CardTitle>Recent Activity</CardTitle>
                 <CardDescription>Latest system activities and events</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {dashboardData?.recentActivity.map((activity) => (
+                  {dashboardData.recentActivity.length === 0 && (
+                    <p className="text-gray-500 text-sm">No recent activity</p>
+                  )}
+                  {dashboardData.recentActivity.map((activity) => (
                     <div key={activity.id} className="flex items-start space-x-3">
                       <div className="bg-blue-100 rounded-full p-2">
                         <AlertCircle className="h-4 w-4 text-blue-600" />
                       </div>
                       <div className="flex-1">
                         <p className="text-sm text-gray-900">{activity.message}</p>
-                        <p className="text-xs text-gray-500">{activity.time}</p>
+                        <p className="text-xs text-gray-500">
+                          {activity.created_at
+                            ? new Date(activity.created_at).toLocaleString()
+                            : ''}
+                        </p>
                       </div>
                     </div>
                   ))}
@@ -186,22 +307,35 @@ export default function AdminDashboard() {
             </Card>
 
             {/* Popular Tests */}
-            <Card>
+            <Card className="mb-8">
               <CardHeader>
                 <CardTitle>Popular Test Series</CardTitle>
                 <CardDescription>Most attempted test series this month</CardDescription>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
-                  {dashboardData?.popularTests.map((test, index) => (
-                    <div key={test.id} className="flex items-center justify-between">
+                  {(!dashboardData.popularTests ||
+                    dashboardData.popularTests.length === 0) && (
+                    <p className="text-gray-500 text-sm">No popular tests data available</p>
+                  )}
+                  {dashboardData.popularTests?.map((test, index) => (
+                    <div
+                      key={test.id}
+                      className="flex items-center justify-between"
+                    >
                       <div className="flex items-center space-x-3">
                         <div className="bg-gray-100 rounded-full w-8 h-8 flex items-center justify-center">
-                          <span className="text-sm font-bold text-gray-600">#{index + 1}</span>
+                          <span className="text-sm font-bold text-gray-600">
+                            #{index + 1}
+                          </span>
                         </div>
                         <div>
-                          <p className="text-sm font-medium text-gray-900">{test.name}</p>
-                          <p className="text-xs text-gray-500">{test.attempts} attempts</p>
+                          <p className="text-sm font-medium text-gray-900">
+                            {test.name}
+                          </p>
+                          <p className="text-xs text-gray-500">
+                            {test.attempts} attempts
+                          </p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -215,90 +349,99 @@ export default function AdminDashboard() {
                 </div>
               </CardContent>
             </Card>
-          </div>
 
-          {/* Charts Section */}
-          <div className="mt-8 grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>User Growth</CardTitle>
-                <CardDescription>Monthly user registration trend</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-end justify-between space-x-2">
-                  {dashboardData?.monthlyStats.users.map((value, index) => (
-                    <div key={index} className="flex flex-col items-center">
-                      <div 
-                        className="bg-blue-500 rounded-t"
-                        style={{ 
-                          height: `${(value / Math.max(...dashboardData.monthlyStats.users)) * 200}px`,
-                          width: '20px'
-                        }}
-                      />
-                      <span className="text-xs text-gray-500 mt-1">
-                        {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][index]}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+            {/* Monthly Stats Charts */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+              {/* User Growth Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>User Growth</CardTitle>
+                  <CardDescription>Monthly user registration trend</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64 flex items-end justify-between space-x-2">
+                    {dashboardData.monthlyStats.users.map((value, index) => {
+                      const maxUser = Math.max(...dashboardData.monthlyStats.users);
+                      const height = maxUser ? (value / maxUser) * 200 : 0;
+                      return (
+                        <div
+                          key={index}
+                          className="flex flex-col items-center"
+                        >
+                          <div
+                            className="bg-blue-500 rounded-t"
+                            style={{ height: `${height}px`, width: '20px' }}
+                          />
+                          <span className="text-xs text-gray-500 mt-1">
+                            {[
+                              'Jan',
+                              'Feb',
+                              'Mar',
+                              'Apr',
+                              'May',
+                              'Jun',
+                              'Jul',
+                              'Aug',
+                              'Sep',
+                              'Oct',
+                              'Nov',
+                              'Dec',
+                            ][index]}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle>Revenue Trend</CardTitle>
-                <CardDescription>Monthly revenue growth</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="h-64 flex items-end justify-between space-x-2">
-                  {dashboardData?.monthlyStats.revenue.map((value, index) => (
-                    <div key={index} className="flex flex-col items-center">
-                      <div 
-                        className="bg-green-500 rounded-t"
-                        style={{ 
-                          height: `${(value / Math.max(...dashboardData.monthlyStats.revenue)) * 200}px`,
-                          width: '20px'
-                        }}
-                      />
-                      <span className="text-xs text-gray-500 mt-1">
-                        {['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][index]}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Quick Actions */}
-          <Card className="mt-8">
-            <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
-              <CardDescription>Common administrative tasks</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                  <Calendar className="h-8 w-8 text-blue-500 mb-2" />
-                  <h3 className="font-semibold text-gray-900">Schedule Live Test</h3>
-                  <p className="text-sm text-gray-600">Create and schedule new live tests</p>
-                </div>
-                
-                <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                  <BookOpen className="h-8 w-8 text-green-500 mb-2" />
-                  <h3 className="font-semibold text-gray-900">Add Test Series</h3>
-                  <p className="text-sm text-gray-600">Create new test series and categories</p>
-                </div>
-                
-                <div className="p-4 border rounded-lg hover:bg-gray-50 cursor-pointer transition-colors">
-                  <Download className="h-8 w-8 text-purple-500 mb-2" />
-                  <h3 className="font-semibold text-gray-900">Export Reports</h3>
-                  <p className="text-sm text-gray-600">Download analytics and user reports</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+              {/* Revenue Growth Chart */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Revenue Trend</CardTitle>
+                  <CardDescription>Monthly revenue growth</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="h-64 flex items-end justify-between space-x-2">
+                    {dashboardData.monthlyStats.revenue.map((value, index) => {
+                      const maxRevenue = Math.max(
+                        ...dashboardData.monthlyStats.revenue
+                      );
+                      const height = maxRevenue ? (value / maxRevenue) * 200 : 0;
+                      return (
+                        <div
+                          key={index}
+                          className="flex flex-col items-center"
+                        >
+                          <div
+                            className="bg-green-500 rounded-t"
+                            style={{ height: `${height}px`, width: '20px' }}
+                          />
+                          <span className="text-xs text-gray-500 mt-1">
+                            {[
+                              'Jan',
+                              'Feb',
+                              'Mar',
+                              'Apr',
+                              'May',
+                              'Jun',
+                              'Jul',
+                              'Aug',
+                              'Sep',
+                              'Oct',
+                              'Nov',
+                              'Dec',
+                            ][index]}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </>
+        )}
       </div>
     </div>
   );
