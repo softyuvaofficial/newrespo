@@ -2,28 +2,47 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Badge } from '@/components/ui/badge';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import AdminSidebar from '@/components/AdminSidebar';
 import { useAdminAuth } from '@/contexts/AdminAuthContext';
 import { Plus, Edit, Trash2, FolderTree, Tag } from 'lucide-react';
+import { supabase } from '@/utils/supabaseClient';
 
 export default function AdminCategories() {
   const { admin, loading, signOut } = useAdminAuth();
   const router = useRouter();
+
   const [categories, setCategories] = useState([]);
   const [subcategories, setSubcategories] = useState([]);
   const [isAddingCategory, setIsAddingCategory] = useState(false);
   const [isAddingSubcategory, setIsAddingSubcategory] = useState(false);
   const [editingCategory, setEditingCategory] = useState(null);
   const [error, setError] = useState(null);
+
   const [newCategory, setNewCategory] = useState({ name: '', description: '' });
-  const [newSubcategory, setNewSubcategory] = useState({ name: '', description: '', category_id: '' });
+  const [newSubcategory, setNewSubcategory] = useState({
+    name: '',
+    description: '',
+    category_id: '',
+  });
 
   useEffect(() => {
     if (!loading && !admin) {
@@ -38,31 +57,18 @@ export default function AdminCategories() {
   }, [admin, loading]);
 
   const fetchCategories = async () => {
-    try {
-      const response = await fetch('/api/categories');
-      const data = await response.json();
-      if (response.ok) {
-        setCategories(data);
-      } else {
-        setError(data.error);
-      }
-    } catch (err) {
-      setError(err.message);
-    }
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*')
+      .order('created_at', { ascending: false });
+    if (error) setError(error.message);
+    else setCategories(data);
   };
 
   const fetchSubcategories = async () => {
-    try {
-      const response = await fetch('/api/subcategories');
-      const data = await response.json();
-      if (response.ok) {
-        setSubcategories(data);
-      } else {
-        setError(data.error);
-      }
-    } catch (err) {
-      setError(err.message);
-    }
+    const { data, error } = await supabase.from('subcategories').select('*');
+    if (error) setError(error.message);
+    else setSubcategories(data);
   };
 
   const handleSignOut = async () => {
@@ -71,127 +77,127 @@ export default function AdminCategories() {
   };
 
   const handleAddCategory = async () => {
-    try {
-      const response = await fetch('/api/categories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newCategory),
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setCategories([...categories, data]);
-        setNewCategory({ name: '', description: '' });
-        setIsAddingCategory(false);
-      } else {
-        setError(data.error);
-      }
-    } catch (err) {
-      setError(err.message);
+    if (!newCategory.name.trim()) {
+      setError('Category name is required');
+      return;
+    }
+    const { data, error } = await supabase
+      .from('categories')
+      .insert([newCategory])
+      .select()
+      .single();
+    if (error) setError(error.message);
+    else {
+      setCategories([data, ...categories]);
+      setNewCategory({ name: '', description: '' });
+      setIsAddingCategory(false);
+      setError(null);
     }
   };
 
   const handleAddSubcategory = async () => {
-    try {
-      const response = await fetch('/api/subcategories', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newSubcategory),
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setSubcategories([...subcategories, data]);
-        setNewSubcategory({ name: '', description: '', category_id: '' });
-        setIsAddingSubcategory(false);
-      } else {
-        setError(data.error);
-      }
-    } catch (err) {
-      setError(err.message);
+    if (!newSubcategory.category_id) {
+      setError('Please select a parent category');
+      return;
+    }
+    if (!newSubcategory.name.trim()) {
+      setError('Subcategory name is required');
+      return;
+    }
+    const { data, error } = await supabase
+      .from('subcategories')
+      .insert([newSubcategory])
+      .select()
+      .single();
+    if (error) setError(error.message);
+    else {
+      setSubcategories([data, ...subcategories]);
+      setNewSubcategory({ name: '', description: '', category_id: '' });
+      setIsAddingSubcategory(false);
+      setError(null);
     }
   };
 
   const handleEditCategory = (category) => {
     setEditingCategory(category);
     setNewCategory({ name: category.name, description: category.description });
+    setError(null);
   };
 
   const handleUpdateCategory = async () => {
-    try {
-      const response = await fetch(`/api/categories/${editingCategory.id}`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(newCategory),
-      });
-      
-      const data = await response.json();
-      
-      if (response.ok) {
-        setCategories(categories.map(cat => 
-          cat.id === editingCategory.id 
-            ? { ...cat, name: data.name, description: data.description }
-            : cat
-        ));
-        setEditingCategory(null);
-        setNewCategory({ name: '', description: '' });
-      } else {
-        setError(data.error);
-      }
-    } catch (err) {
-      setError(err.message);
+    if (!newCategory.name.trim()) {
+      setError('Category name is required');
+      return;
+    }
+    const { data, error } = await supabase
+      .from('categories')
+      .update({ name: newCategory.name, description: newCategory.description })
+      .eq('id', editingCategory.id)
+      .select()
+      .single();
+    if (error) setError(error.message);
+    else {
+      setCategories(
+        categories.map((cat) =>
+          cat.id === editingCategory.id ? data : cat
+        )
+      );
+      setEditingCategory(null);
+      setNewCategory({ name: '', description: '' });
+      setError(null);
     }
   };
 
   const handleDeleteCategory = async (categoryId) => {
-    if (confirm('Are you sure you want to delete this category? This will also delete all subcategories.')) {
-      try {
-        const response = await fetch(`/api/categories/${categoryId}`, {
-          method: 'DELETE',
-        });
-        
-        if (response.ok) {
-          setCategories(categories.filter(cat => cat.id !== categoryId));
-          setSubcategories(subcategories.filter(sub => sub.category_id !== categoryId));
-        } else {
-          const data = await response.json();
-          setError(data.error);
-        }
-      } catch (err) {
-        setError(err.message);
+    if (
+      confirm(
+        'Are you sure you want to delete this category? This will also delete all subcategories.'
+      )
+    ) {
+      // Delete subcategories linked to this category first
+      const { error: subErr } = await supabase
+        .from('subcategories')
+        .delete()
+        .eq('category_id', categoryId);
+
+      if (subErr) {
+        setError(subErr.message);
+        return;
+      }
+
+      const { error } = await supabase
+        .from('categories')
+        .delete()
+        .eq('id', categoryId);
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setCategories(categories.filter((cat) => cat.id !== categoryId));
+        setSubcategories(subcategories.filter((sub) => sub.category_id !== categoryId));
+        setError(null);
       }
     }
   };
 
   const handleDeleteSubcategory = async (subcategoryId) => {
     if (confirm('Are you sure you want to delete this subcategory?')) {
-      try {
-        const response = await fetch(`/api/subcategories/${subcategoryId}`, {
-          method: 'DELETE',
-        });
-        
-        if (response.ok) {
-          setSubcategories(subcategories.filter(sub => sub.id !== subcategoryId));
-        } else {
-          const data = await response.json();
-          setError(data.error);
-        }
-      } catch (err) {
-        setError(err.message);
+      const { error } = await supabase
+        .from('subcategories')
+        .delete()
+        .eq('id', subcategoryId);
+
+      if (error) {
+        setError(error.message);
+      } else {
+        setSubcategories(subcategories.filter((sub) => sub.id !== subcategoryId));
+        setError(null);
       }
     }
   };
 
   const getCategoryName = (categoryId) => {
-    const category = categories.find(cat => cat.id === categoryId);
+    const category = categories.find((cat) => cat.id === categoryId);
     return category ? category.name : 'Unknown';
   };
 
@@ -213,14 +219,14 @@ export default function AdminCategories() {
   return (
     <div className="min-h-screen bg-gray-50 flex">
       <AdminSidebar onSignOut={handleSignOut} />
-      
+
       <div className="flex-1 lg:ml-0">
         {error && (
           <Alert variant="destructive" className="mx-6 mt-6">
             <AlertDescription>{error}</AlertDescription>
           </Alert>
         )}
-        
+
         <div className="bg-white shadow-sm border-b px-6 py-4">
           <div className="flex items-center justify-between">
             <div>
@@ -238,7 +244,6 @@ export default function AdminCategories() {
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Add New Category</DialogTitle>
-                    <DialogDescription>Create a new test category</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
@@ -246,7 +251,9 @@ export default function AdminCategories() {
                       <Input
                         id="categoryName"
                         value={newCategory.name}
-                        onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                        onChange={(e) =>
+                          setNewCategory({ ...newCategory, name: e.target.value })
+                        }
                         placeholder="Enter category name"
                       />
                     </div>
@@ -255,7 +262,9 @@ export default function AdminCategories() {
                       <Input
                         id="categoryDescription"
                         value={newCategory.description}
-                        onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
+                        onChange={(e) =>
+                          setNewCategory({ ...newCategory, description: e.target.value })
+                        }
                         placeholder="Enter category description"
                       />
                     </div>
@@ -279,7 +288,6 @@ export default function AdminCategories() {
                 <DialogContent>
                   <DialogHeader>
                     <DialogTitle>Add New Subcategory</DialogTitle>
-                    <DialogDescription>Create a new subcategory under a parent category</DialogDescription>
                   </DialogHeader>
                   <div className="space-y-4">
                     <div>
@@ -287,11 +295,13 @@ export default function AdminCategories() {
                       <select
                         id="parentCategory"
                         value={newSubcategory.category_id}
-                        onChange={(e) => setNewSubcategory({ ...newSubcategory, category_id: e.target.value })}
+                        onChange={(e) =>
+                          setNewSubcategory({ ...newSubcategory, category_id: e.target.value })
+                        }
                         className="w-full p-2 border border-gray-300 rounded-md"
                       >
                         <option value="">Select parent category</option>
-                        {categories.map(category => (
+                        {categories.map((category) => (
                           <option key={category.id} value={category.id}>
                             {category.name}
                           </option>
@@ -303,7 +313,9 @@ export default function AdminCategories() {
                       <Input
                         id="subcategoryName"
                         value={newSubcategory.name}
-                        onChange={(e) => setNewSubcategory({ ...newSubcategory, name: e.target.value })}
+                        onChange={(e) =>
+                          setNewSubcategory({ ...newSubcategory, name: e.target.value })
+                        }
                         placeholder="Enter subcategory name"
                       />
                     </div>
@@ -312,7 +324,9 @@ export default function AdminCategories() {
                       <Input
                         id="subcategoryDescription"
                         value={newSubcategory.description}
-                        onChange={(e) => setNewSubcategory({ ...newSubcategory, description: e.target.value })}
+                        onChange={(e) =>
+                          setNewSubcategory({ ...newSubcategory, description: e.target.value })
+                        }
                         placeholder="Enter subcategory description"
                       />
                     </div>
@@ -343,13 +357,21 @@ export default function AdminCategories() {
               <CardContent>
                 <div className="space-y-4">
                   {categories.map((category) => (
-                    <div key={category.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div
+                      key={category.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-900">{category.name}</h3>
                         <p className="text-sm text-gray-600">{category.description}</p>
                         <div className="flex items-center space-x-4 mt-2">
                           <Badge variant="outline">
-                            {subcategories.filter(sub => sub.category_id === category.id).length} subcategories
+                            {
+                              subcategories.filter(
+                                (sub) => sub.category_id === category.id
+                              ).length
+                            }{' '}
+                            subcategories
                           </Badge>
                           <span className="text-xs text-gray-500">
                             Created: {new Date(category.created_at).toLocaleDateString()}
@@ -391,7 +413,10 @@ export default function AdminCategories() {
               <CardContent>
                 <div className="space-y-4">
                   {subcategories.map((subcategory) => (
-                    <div key={subcategory.id} className="flex items-center justify-between p-4 border rounded-lg">
+                    <div
+                      key={subcategory.id}
+                      className="flex items-center justify-between p-4 border rounded-lg"
+                    >
                       <div className="flex-1">
                         <h3 className="font-semibold text-gray-900">{subcategory.name}</h3>
                         <p className="text-sm text-gray-600">{subcategory.description}</p>
@@ -423,7 +448,6 @@ export default function AdminCategories() {
             <DialogContent>
               <DialogHeader>
                 <DialogTitle>Edit Category</DialogTitle>
-                <DialogDescription>Update category information</DialogDescription>
               </DialogHeader>
               <div className="space-y-4">
                 <div>
@@ -431,7 +455,9 @@ export default function AdminCategories() {
                   <Input
                     id="editCategoryName"
                     value={newCategory.name}
-                    onChange={(e) => setNewCategory({ ...newCategory, name: e.target.value })}
+                    onChange={(e) =>
+                      setNewCategory({ ...newCategory, name: e.target.value })
+                    }
                     placeholder="Enter category name"
                   />
                 </div>
@@ -440,7 +466,9 @@ export default function AdminCategories() {
                   <Input
                     id="editCategoryDescription"
                     value={newCategory.description}
-                    onChange={(e) => setNewCategory({ ...newCategory, description: e.target.value })}
+                    onChange={(e) =>
+                      setNewCategory({ ...newCategory, description: e.target.value })
+                    }
                     placeholder="Enter category description"
                   />
                 </div>
