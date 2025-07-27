@@ -486,3 +486,22 @@ export default function AdminCategories() {
     </div>
   );
 }
+
+useEffect(() => {
+  const channel = supabase
+    .channel('public:categories')
+    .on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'categories' },
+      (payload) => {
+        console.log('Change received!', payload);
+        fetchCategories(); // re-fetch after any change
+      }
+    )
+    .subscribe();
+
+  return () => {
+    supabase.removeChannel(channel);
+  };
+}, []);
+
